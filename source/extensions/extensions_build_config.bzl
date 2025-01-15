@@ -383,6 +383,9 @@ EXTENSIONS = {
 
     "envoy.tls.cert_validator.spiffe":                  "//source/extensions/transport_sockets/tls/cert_validator/spiffe:config",
 
+    # RBE cert/id validator
+    "envoy.tls.cert_validator.rbe":                     "//source/extensions/transport_sockets/tls/cert_validator/rbe:config",
+
     #
     # HTTP header formatters
     #

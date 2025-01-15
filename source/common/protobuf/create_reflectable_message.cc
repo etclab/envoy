@@ -133,6 +133,7 @@ Protobuf::ReflectableMessage createReflectableMessage(const Protobuf::Message& m
 #include "envoy/extensions/transport_sockets/tls/v3/secret_descriptor.pb.h"
 #include "envoy/extensions/transport_sockets/tls/v3/tls_descriptor.pb.h"
 #include "envoy/extensions/transport_sockets/tls/v3/tls_spiffe_validator_config_descriptor.pb.h"
+#include "envoy/extensions/transport_sockets/tls/v3/tls_rbe_validator_config_descriptor.pb.h"
 #include "envoy/extensions/udp_packet_writer/v3/udp_default_writer_factory_descriptor.pb.h"
 #include "envoy/extensions/udp_packet_writer/v3/udp_gso_batch_writer_factory_descriptor.pb.h"
 #include "envoy/extensions/upstreams/http/generic/v3/generic_connection_pool_descriptor.pb.h"
@@ -364,6 +365,8 @@ std::unique_ptr<TextFormatTranscoder> createTranscoder() {
       protobuf::reflection::envoy_extensions_transport_sockets_tls_v3_secret::kFileDescriptorInfo,
       protobuf::reflection::envoy_extensions_transport_sockets_tls_v3_tls::kFileDescriptorInfo,
       protobuf::reflection::envoy_extensions_transport_sockets_tls_v3_tls_spiffe_validator_config::
+          kFileDescriptorInfo,
+      protobuf::reflection::envoy_extensions_transport_sockets_tls_v3_tls_rbe_validator_config::
           kFileDescriptorInfo,
       protobuf::reflection::envoy_extensions_udp_packet_writer_v3_udp_default_writer_factory::
           kFileDescriptorInfo,

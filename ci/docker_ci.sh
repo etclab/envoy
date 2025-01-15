@@ -9,9 +9,9 @@ set -e
 # DOCKER_CI_DRYRUN=true
 #
 ## Set these to tag/push images to your own repo
-# DOCKER_IMAGE_PREFIX=mydocker/repo
-# DOCKERHUB_USERNAME=me
-# DOCKERHUB_PASSWORD=mypassword
+DOCKER_IMAGE_PREFIX=atosh502/envoy
+# DOCKERHUB_USERNAME=atosh502
+# DOCKERHUB_PASSWORD=
 #
 ## Set these to simulate types of CI run
 # CI_SHA1=MOCKSHA
@@ -92,7 +92,8 @@ config_env() {
 }
 
 # "-google-vrp" must come afer "" to ensure we rebuild the local base image dependency.
-BUILD_TYPES=("" "-debug" "-contrib" "-contrib-debug" "-distroless" "-google-vrp" "-tools")
+# BUILD_TYPES=("" "-debug" "-contrib" "-contrib-debug" "-distroless" "-google-vrp" "-tools")
+BUILD_TYPES=("-debug")
 
 # Configure docker-buildx tools
 BUILD_COMMAND=("buildx" "build")
@@ -206,7 +207,8 @@ build_and_maybe_push_image () {
         "${BUILD_COMMAND[@]}"
         "--platform" "${platform}"
         "${args[@]}"
-        -t "${build_tag}"
+        # -t "${build_tag}"
+        -t "atosh502/envoy-debug-dev"
         .)
     echo ">> ${action}: ${build_tag}"
     echo "> docker ${docker_build_args[*]}"
