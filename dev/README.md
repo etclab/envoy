@@ -15,3 +15,9 @@
 ### Certificate extension
 - Admin token is read from [this extension](https://github.com/etclab/istio/blob/68054e7e3f13290282b251ba50e4195b46e470ca/security/pkg/nodeagent/cache/secretcache.go#L459-L462). See [this](https://github.com/etclab/mazu/blob/c25b92c5016021d694d68e9628b9ef4f43194a71/sprint4/go-cert/read-cert.go#L38) for how to read custom extensions in golang.
 - The token is checked using the kube c client against the kube api server
+
+### Tips on developing with envoy+vscode
+- Use the `clangd` extension
+- Open the `istio/envoy` folder in a [Dev Container](https://github.com/envoyproxy/envoy/tree/main/tools/vscode#recommended-vscode-setup)
+- [Refresh the compilation database](https://github.com/envoyproxy/envoy/tree/main/tools/vscode#recommended-vscode-setup) with `./dev/compile-db.sh` after making changes to dependencies or .proto files. Also, running this prevents vscode from complaining about missing files/headers.
+- After making the change, exit out of dev container and run the `./dev/envoy-dev.sh` to build the new docker image.
