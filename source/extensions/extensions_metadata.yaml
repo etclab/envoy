@@ -1239,8 +1239,8 @@ envoy.tls.cert_validator.spiffe:
 envoy.tls.cert_validator.rbe:
   categories:
   - envoy.tls.cert_validator
-  security_posture: unknown
-  status: wip
+  security_posture: requires_trusted_downstream_and_upstream
+  status: alpha
 envoy.tracers.datadog:
   categories:
   - envoy.tracers
