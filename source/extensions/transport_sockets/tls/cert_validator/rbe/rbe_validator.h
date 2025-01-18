@@ -82,6 +82,8 @@ private:
   std::string ca_file_name_;
   std::vector<SanMatcherPtr> subject_alt_name_matchers_{};
   absl::flat_hash_map<std::string, X509StorePtr> trust_bundle_stores_;
+  
+  std::map<std::string, bool> pod_validity_map_;
 
   SslStats& stats_;
   TimeSource& time_source_;

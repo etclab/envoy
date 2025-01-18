@@ -49,12 +49,9 @@ RBEValidator::RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig*
     Config::DataSource::read(rbeConfig.pod_validity_map(), true, config->api()), std::string);
 
   auto json_obj = nlohmann::json::parse(json_str);
-  std::map<std::string, bool> pod_validity_map;
   for (auto& el : json_obj.items()) {
-    pod_validity_map[el.key()] = el.value().get<bool>();
+    pod_validity_map_[el.key()] = el.value().get<bool>();
   }
-  
-  ENVOY_LOG_MISC(info, "[mazu] logging filename: {}", pod_validity_map);
 }
 
 // old constructor
@@ -236,7 +233,7 @@ absl::StatusOr<int> RBEValidator::initializeSslContexts(std::vector<SSL_CTX*>, b
 ValidationResults RBEValidator::doVerifyCertChain(
     STACK_OF(X509)& cert_chain, Ssl::ValidateResultCallbackPtr /*callback*/,
     const Network::TransportSocketOptionsConstSharedPtr& /*transport_socket_options*/,
-    SSL_CTX& ctx, const CertValidator::ExtraValidationContext& /*validation_context*/,
+    SSL_CTX& /*ctx*/, const CertValidator::ExtraValidationContext& validation_context,
     bool /*is_server*/, absl::string_view /*host_name*/) {
   if (sk_X509_num(&cert_chain) == 0) {
     stats_.fail_verify_error_.inc();
@@ -246,74 +243,40 @@ ValidationResults RBEValidator::doVerifyCertChain(
   }
   X509* leaf_cert = sk_X509_value(&cert_chain, 0);
   ASSERT(leaf_cert);
+
+  constexpr absl::string_view admin_token_oid = "1.3.6.1.4.1.9901.33";
+  std::string_view admin_token_view = Utility::getCertificateExtensionValue(*leaf_cert, admin_token_oid);
+  std::string admin_token = {admin_token_view.begin(), admin_token_view.end()};
+  ENVOY_LOG_MISC(info, "[mazu] logging admin token: {}", admin_token);
+
+  // TODO: validate admin token here
   
-  // constexpr absl::string_view pod_uid_oid = "1.3.6.1.4.1.9901.37";
-  // constexpr absl::string_view spiffe_id_oid = "1.3.6.1.4.1.9901.34";
+  constexpr absl::string_view spiffe_id_oid = "1.3.6.1.4.1.9901.34";
+  std::string_view spiffe_id = Utility::getCertificateExtensionValue(*leaf_cert, spiffe_id_oid);
+  std::string spiffe_id_str = {spiffe_id.begin(), spiffe_id.end()};
 
-  // always print to info
-  auto extension_oids = Utility::getCertificateExtensionOids(*leaf_cert);
-  for (const auto& oid : extension_oids) {
-    ENVOY_LOG_MISC(info, "[mazu] extension oid: {}, value: {}", oid, 
-    Utility::getCertificateExtensionValue(*leaf_cert, oid));
-  }
+  auto socket_callbacks = validation_context.callbacks;
+  auto addr = socket_callbacks->connection().connectionInfoProvider().remoteAddress();
+  auto port = addr->ip()->port();
+  auto ip_string = addr->ip()->addressAsString();
 
-  int fd = SSL_get_fd(SSL_new(&ctx));
-  ENVOY_LOG_MISC(info, "[mazu] SSL_get_fd {}", fd);
-  if (fd >= 0) {
-    ENVOY_LOG_MISC(info, "[mazu] inside if (fd >= 0)");
-    struct sockaddr_storage addr;
-    socklen_t addr_len = sizeof(addr);
-    if (getpeername(fd, reinterpret_cast<struct sockaddr*>(&addr), &addr_len) == 0) {
-      ENVOY_LOG_MISC(info, "[mazu] inside getpeername()");
-      ENVOY_LOG_MISC(info, "[mazu] addr.ss_family = {}", addr.ss_family);
+  std::string pod_key = ip_string + "|" + std::to_string(port) + "|" + spiffe_id_str;
 
-      char ip_str[INET6_ADDRSTRLEN];
-      int port;
-
-      if (addr.ss_family == AF_INET) {
-        ENVOY_LOG_MISC(info, "[mazu] addr.ss_family is AF_INET");
-
-        struct sockaddr_in *s = reinterpret_cast<struct sockaddr_in*>(&addr);
-        port = ntohs(s->sin_port);
-        inet_ntop(AF_INET, &s->sin_addr, ip_str, sizeof(ip_str));
-      } else {
-        ENVOY_LOG_MISC(info, "[mazu] addr.ss_family is NOT AF_INET");
-
-        struct sockaddr_in6 *s = reinterpret_cast<struct sockaddr_in6*>(&addr);
-        port = ntohs(s->sin6_port);
-        inet_ntop(AF_INET6, &s->sin6_addr, ip_str, sizeof(ip_str));
-      }
-      ENVOY_LOG_MISC(info, "[mazu] finally peer IP:port = {}:{}", ip_str, port);
-    }
-  }
-
-  ENVOY_LOG_MISC(info, "[mazu] subject name: {}", Utility::getSubjectFromCertificate(*leaf_cert));
-  ENVOY_LOG_MISC(info, "[mazu] issuer name: {}", Utility::getIssuerFromCertificate(*leaf_cert));
-
-  // bssl::UniquePtr<GENERAL_NAMES> san_names(static_cast<GENERAL_NAMES*>(
-  //     X509_get_ext_d2i(&leaf_cert, NID_subject_alt_name, nullptr, nullptr)));
-  // ASSERT(san_names != nullptr,
-  //        "san_names should have at least one name after SPIFFE cert validation");
-
-  // for (const GENERAL_NAME* general_name : san_names.get()) {
-  //   ENVOY_LOG_MISC(debug, "[mazu] san name: {}", Utility::generalNameAsString(general_name));
-  // }
-  
-  // std::string error_details;
-  // bool verified = verifyCertChainUsingTrustBundleStore(*leaf_cert, &cert_chain,
-  //                                                      SSL_CTX_get0_param(&ssl_ctx), error_details);
-  // // this should be what returns the final result of this validator
-  // return verified ? ValidationResults{ValidationResults::ValidationStatus::Successful,
-  //                                     Envoy::Ssl::ClientValidationStatus::Validated, absl::nullopt,
-  //                                     absl::nullopt}
-  //                 : ValidationResults{ValidationResults::ValidationStatus::Failed,
-  //                                     Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt,
-  //                                     error_details};
-  
-  // we'll always return successful for now
-  return ValidationResults{ValidationResults::ValidationStatus::Successful,
+  if (pod_validity_map_.find(pod_key) == pod_validity_map_.end()) {
+    ENVOY_LOG_MISC(info, "[mazu] no entry found for key: {}", pod_key);
+  } else {
+    ENVOY_LOG_MISC(info, "[mazu] found entry for key: {}", pod_key);
+    if (pod_validity_map_[pod_key] == true) {
+      ENVOY_LOG_MISC(info, "[mazu] pod_key is valid {}", pod_validity_map_[pod_key]);
+      return ValidationResults{ValidationResults::ValidationStatus::Successful,
                                       Envoy::Ssl::ClientValidationStatus::Validated, absl::nullopt,
                                       absl::nullopt};
+    }
+  }
+  ENVOY_LOG_MISC(info, "[mazu] pod with key {} is invalid", pod_key);
+  return ValidationResults{ValidationResults::ValidationStatus::Failed,
+                                      Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt,
+                                      "verify cert failed: invalid pod"};
 }
 
 // local
