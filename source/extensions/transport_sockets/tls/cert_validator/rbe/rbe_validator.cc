@@ -9,10 +9,13 @@
 #include <nlohmann/json.hpp>
 
 #include "envoy/extensions/transport_sockets/tls/v3/common.pb.h"
+#include "envoy/server/transport_socket_config.h"
 #include "envoy/extensions/transport_sockets/tls/v3/tls_rbe_validator_config.pb.h"
 #include "envoy/network/transport_socket.h"
 #include "envoy/registry/registry.h"
+#include "envoy/server/factory_context.h"
 #include "envoy/ssl/context_config.h"
+#include "envoy/secret/secret_provider.h"
 #include "envoy/ssl/ssl_socket_extended_info.h"
 
 #include "source/common/config/datasource.h"
@@ -45,12 +48,34 @@ RBEValidator::RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig*
       config->customValidatorConfig().value().typed_config(),
       ProtobufMessage::getStrictValidationVisitor(), rbeConfig));
 
+  ENVOY_LOG_MISC(info, "[mazu] rbe config: {}", rbeConfig.DebugString());
+
   auto json_str = THROW_OR_RETURN_VALUE(
     Config::DataSource::read(rbeConfig.pod_validity_map(), true, config->api()), std::string);
 
   auto json_obj = nlohmann::json::parse(json_str);
   for (auto& el : json_obj.items()) {
     pod_validity_map_[el.key()] = el.value().get<bool>();
+  }
+
+  auto sds_config = rbeConfig.pod_validity_sds();
+  ENVOY_LOG_MISC(info, "[mazu] sds config loading ok: {}", sds_config.DebugString());
+
+  const auto& sds_config_store = sds_config.sds_config();
+  ENVOY_LOG_MISC(info, "[mazu] sds config store loading ok: {}", sds_config_store.DebugString());
+
+  auto& transport_context = dynamic_cast<Server::Configuration::TransportSocketFactoryContext&>(context);
+  auto secret_provider = context.clusterManager().clusterManagerFactory()
+    .secretManager().findOrCreateGenericSecretProvider(
+      sds_config_store, "pod_validity_map", transport_context,
+      transport_context.initManager());
+
+  ENVOY_LOG_MISC(info, "[mazu] secret_provider loading ok: {}", secret_provider->secret()->GetTypeName());
+
+  // use the secret
+  if (secret_provider->secret() != nullptr) {
+    auto secret = secret_provider->secret()->secret();
+    ENVOY_LOG_MISC(info, "[mazu] received secret: {}", secret.filename());
   }
 }
 
