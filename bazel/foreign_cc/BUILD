@@ -468,6 +468,71 @@ envoy_cmake(
 )
 
 envoy_cmake(
+    name = "kube_c_client",
+    cache_entries = {
+        # CMAKE
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "CMAKE_CXX_COMPILER_FORCED": "ON",
+
+        "CMAKE_POSITION_INDEPENDENT_CODE": "ON",
+        "CMAKE_C_FLAGS": "-fPIC",
+        "CMAKE_CXX_FLAGS": "-fPIC",  
+
+        # BUILD
+        "BUILD_SHARED_LIBS": "ON",
+        "BUILD_TESTING": "ON",
+
+        #ZLIB
+        "ZLIB_LIBRARY": "$EXT_BUILD_DEPS/zlib",
+        "ZLIB_INCLUDE_DIR": "$EXT_BUILD_DEPS/zlib/include",
+
+        #YAML
+        "yaml_DIR": "$EXT_BUILD_DEPS/libyaml/cmake",
+
+        # C-Ares
+        "ENABLE_ARES": "on",
+        "CARES_LIBRARY": "$EXT_BUILD_DEPS/ares",
+        "CARES_INCLUDE_DIR": "$EXT_BUILD_DEPS/ares/include",
+    },
+    linkopts = [
+        "-lssl",
+        "-lcrypto",
+    ],
+    lib_source = "@com_github_etclab_kube_c_client//:kubernetes",
+    out_static_libs = ["libkubernetes.a"],
+    deps = [
+        ":curl",
+        ":zlib",
+        ":libyaml",
+        ":libwebsockets",
+        ":ares",
+        "//contrib/vcl/source:vpp_vcl",
+    ]
+)
+
+envoy_cmake(
+    name = "libwebsockets",
+    cache_entries = {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "DISABLE_WERROR": "ON",
+    },
+    lib_source = "@com_github_warmcat_libwebsockets//:all",
+)
+
+envoy_cmake(
+    name = "libyaml",
+    cache_entries = {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "DBUILD_TESTING": "OFF",
+        "DBUILD_SHARED_LIBS": "OFF",
+    },
+    lib_source = "@com_github_yaml_libyaml//:all",
+)
+
+envoy_cmake(
     name = "maxmind",
     cache_entries = {
         "CMAKE_BUILD_TYPE": "Release",
