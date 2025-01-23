@@ -9,8 +9,9 @@ set -e
 # DOCKER_CI_DRYRUN=true
 #
 ## Set these to tag/push images to your own repo
-DOCKER_IMAGE_PREFIX=atosh502/envoy
-# DOCKERHUB_USERNAME=atosh502
+DOCKER_USER="shadowbearvr" # [UPDATE FOR YOUR USERNAME]
+DOCKER_IMAGE_PREFIX=$DOCKER_USER/envoy
+# DOCKERHUB_USERNAME=$DOCKER_USER
 # DOCKERHUB_PASSWORD=
 #
 ## Set these to simulate types of CI run
@@ -208,7 +209,7 @@ build_and_maybe_push_image () {
         "--platform" "${platform}"
         "${args[@]}"
         # -t "${build_tag}"
-        -t "atosh502/envoy-debug-dev"
+        -t "${DOCKER_USER}/envoy-debug-dev"
         .)
     echo ">> ${action}: ${build_tag}"
     echo "> docker ${docker_build_args[*]}"
