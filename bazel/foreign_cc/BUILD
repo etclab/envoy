@@ -474,31 +474,16 @@ envoy_cmake(
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_INSTALL_LIBDIR": "lib",
         "CMAKE_CXX_COMPILER_FORCED": "ON",
-
         "CMAKE_POSITION_INDEPENDENT_CODE": "ON",
-        "CMAKE_C_FLAGS": "-fPIC",
         "CMAKE_CXX_FLAGS": "-fPIC",  
 
-        # BUILD
-        "BUILD_SHARED_LIBS": "ON",
-        "BUILD_TESTING": "ON",
-
-        #ZLIB
+        # ZLIB
         "ZLIB_LIBRARY": "$EXT_BUILD_DEPS/zlib",
         "ZLIB_INCLUDE_DIR": "$EXT_BUILD_DEPS/zlib/include",
 
-        #YAML
+        # YAML
         "yaml_DIR": "$EXT_BUILD_DEPS/libyaml/cmake",
-
-        # C-Ares
-        "ENABLE_ARES": "on",
-        "CARES_LIBRARY": "$EXT_BUILD_DEPS/ares",
-        "CARES_INCLUDE_DIR": "$EXT_BUILD_DEPS/ares/include",
     },
-    linkopts = [
-        "-lssl",
-        "-lcrypto",
-    ],
     lib_source = "@com_github_etclab_kube_c_client//:kubernetes",
     out_static_libs = ["libkubernetes.a"],
     deps = [
@@ -508,6 +493,7 @@ envoy_cmake(
         ":libwebsockets",
         ":ares",
         "//contrib/vcl/source:vpp_vcl",
+        "@boringssl//:ssl"
     ]
 )
 

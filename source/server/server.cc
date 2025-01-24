@@ -441,10 +441,10 @@ private:
 
 public:
     KubernetesClient() : basePath(nullptr), sslConfig(nullptr), apiKeys(nullptr), apiClient(nullptr) {
-        int rc = load_kube_config(&basePath, &sslConfig, &apiKeys, nullptr);
-        if (rc != 0) {
-            throw std::runtime_error("Cannot load kubernetes configuration");
-        }
+        // int rc = load_kube_config(&basePath, &sslConfig, &apiKeys, nullptr);
+        // if (rc != 0) {
+        //     throw std::runtime_error("Cannot load kubernetes configuration");
+        // }
 
         apiClient = apiClient_create_with_base_path(basePath, sslConfig, apiKeys);
         if (!apiClient) {
