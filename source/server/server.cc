@@ -547,7 +547,7 @@ absl::Status InstanceBase::initializeOrThrow(Network::Address::InstanceConstShar
                                              ComponentFactory& component_factory) {
   ENVOY_LOG(info, "MAZU logged here again");
   
-  ENVOY_LOG(info, "Collin was here!");
+  ENVOY_LOG(info, "Collin was here (again)!");
 
 try {
         KubernetesClient client;
