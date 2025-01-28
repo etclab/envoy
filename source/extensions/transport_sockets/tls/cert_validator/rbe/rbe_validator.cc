@@ -31,6 +31,14 @@
 #include "openssl/ssl.h"
 #include "openssl/x509v3.h"
 
+extern "C" {
+#include <kubernetes/config/kube_config.h>
+#include <kubernetes/config/incluster_config.h>
+#include <kubernetes/api/AuthenticationV1API.h>
+#include <kubernetes/model/v1_token_review_spec.h>
+#include <kubernetes/model/v1_token_review.h>
+}
+
 namespace Envoy {
 namespace Extensions {
 namespace TransportSockets {
@@ -236,6 +244,65 @@ absl::StatusOr<int> RBEValidator::initializeSslContexts(std::vector<SSL_CTX*>, b
 //   return san_match;
 // }
 
+class KubernetesClient {
+private:
+    char* basePath;
+    sslConfig_t* sslConfig;
+    list_t* apiKeys;
+    apiClient_t* apiClient;
+
+public:
+    KubernetesClient() : basePath(nullptr), sslConfig(nullptr), apiKeys(nullptr), apiClient(nullptr) {
+        int rc = load_incluster_config(&basePath, &sslConfig, &apiKeys);
+        if (rc != 0) {
+            throw std::runtime_error("Cannot load kubernetes configuration in cluster.");
+        }
+
+        apiClient = apiClient_create_with_base_path(basePath, sslConfig, apiKeys);
+        if (!apiClient) {
+            free_client_config(basePath, sslConfig, apiKeys);
+            throw std::runtime_error("Cannot create kubernetes client.");
+        }
+    }
+
+    ~KubernetesClient() {
+        if (apiClient) {
+            apiClient_free(apiClient);
+        }
+        free_client_config(basePath, sslConfig, apiKeys);
+        apiClient_unsetupGlobalEnv();
+    }
+
+    std::string validateSvcAccountToken(std::string token, const std::string& namespaceName = "default") {
+        // Create a non-const copy of the namespace string
+        char* namespace_copy = strdup(namespaceName.c_str());
+        if (!namespace_copy) {
+            throw std::runtime_error("Memory allocation failed");
+        }
+
+        char *c_token = strdup(token.c_str());
+        v1_token_review_spec_t *spec = v1_token_review_spec_create(NULL, c_token);
+        
+        v1_token_review_t *token_review = v1_token_review_create(NULL, NULL, NULL, spec, NULL);
+
+        v1_token_review_t *result = AuthenticationV1API_createTokenReview(apiClient, token_review, NULL, NULL, NULL, NULL);
+
+        // Check the result
+        if (result && result->status && result->status->authenticated) {
+            std::cout << "Token is valid for user " << result->status->user->username << std::endl;
+        } else {
+            std::cerr << "Token is invalid or authentication failed" << std::endl;
+        }
+
+        // Clean up
+        free(result);
+        v1_token_review_free(token_review);
+        free(namespace_copy);
+
+        return result && result->status && result->status->authenticated ? result->status->user->username : "";
+    }
+};
+
 // overridden
 ValidationResults RBEValidator::doVerifyCertChain(
     STACK_OF(X509)& cert_chain, Ssl::ValidateResultCallbackPtr /*callback*/,
@@ -257,6 +324,13 @@ ValidationResults RBEValidator::doVerifyCertChain(
   ENVOY_LOG_MISC(info, "[mazu] logging admin token: {}", admin_token);
 
   // TODO: validate admin token here
+  try {
+    KubernetesClient client;
+    std::string username = client.validateSvcAccountToken(admin_token);
+    std::cout << "Validated username: " << username << std::endl;
+  } catch (const std::exception& e) {
+    std::cerr << "Error: " << e.what() << std::endl;
+  }
   
   constexpr absl::string_view spiffe_id_oid = "1.3.6.1.4.1.9901.34";
   std::string_view spiffe_id = Utility::getCertificateExtensionValue(*leaf_cert, spiffe_id_oid);
