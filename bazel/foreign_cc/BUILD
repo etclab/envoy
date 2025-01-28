@@ -287,7 +287,7 @@ envoy_cmake(
         # FindOpenSSL.cmake which fails at what looks like version parsing
         # (the libraries are found ok).
         "CURL_CA_PATH": "none",
-        "CURL_USE_OPENSSL": "off",
+        "CURL_USE_OPENSSL": "on",
         "OPENSSL_ROOT_DIR": "$EXT_BUILD_DEPS",
         # Avoid libidn2
         "USE_LIBIDN2": "off",
