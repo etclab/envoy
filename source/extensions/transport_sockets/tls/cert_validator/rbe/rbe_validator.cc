@@ -6,6 +6,7 @@
 #include <openssl/x509.h>
 #include <sstream>
 #include <fstream>
+#include <typeinfo>
 #include <nlohmann/json.hpp>
 
 #include "envoy/extensions/transport_sockets/tls/v3/common.pb.h"
@@ -50,33 +51,73 @@ RBEValidator::RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig*
 
   ENVOY_LOG_MISC(info, "[mazu] rbe config: {}", rbeConfig.DebugString());
 
-  auto json_str = THROW_OR_RETURN_VALUE(
-    Config::DataSource::read(rbeConfig.pod_validity_map(), true, config->api()), std::string);
+  // auto json_str = THROW_OR_RETURN_VALUE(
+  //   Config::DataSource::read(rbeConfig.pod_validity_map(), true, config->api()), std::string);
 
-  auto json_obj = nlohmann::json::parse(json_str);
-  for (auto& el : json_obj.items()) {
-    pod_validity_map_[el.key()] = el.value().get<bool>();
-  }
+  // auto json_obj = nlohmann::json::parse(json_str);
+  // for (auto& el : json_obj.items()) {
+  //   pod_validity_map_[el.key()] = el.value().get<bool>();
+  // }
+  // ENVOY_LOG_MISC(info, "[mazu] pod validity map: {}", pod_validity_map_);
 
-  auto sds_config = rbeConfig.pod_validity_sds();
+  const auto& sds_config = rbeConfig.pod_validity_sds();
   ENVOY_LOG_MISC(info, "[mazu] sds config loading ok: {}", sds_config.DebugString());
 
   const auto& sds_config_store = sds_config.sds_config();
   ENVOY_LOG_MISC(info, "[mazu] sds config store loading ok: {}", sds_config_store.DebugString());
+  ENVOY_LOG_MISC(info, "[mazu] sds config type: {}", typeid(sds_config_store).name());
 
-  auto& transport_context = dynamic_cast<Server::Configuration::TransportSocketFactoryContext&>(context);
+  auto* transport_context = dynamic_cast<Server::Configuration::TransportSocketFactoryContext*>(&context);
+  if (transport_context == nullptr) {
+    throw EnvoyException("[mazu] Unable to get TransportSocketFactoryContext");
+  }
+  
+  // okay comment this out for now 
+  // I'll first test a x509 certificate instead of a generic secret
   auto secret_provider = context.clusterManager().clusterManagerFactory()
     .secretManager().findOrCreateGenericSecretProvider(
-      sds_config_store, "pod_validity_map", transport_context,
-      transport_context.initManager());
+      sds_config_store, sds_config.name(), *transport_context,
+      transport_context->initManager());
 
-  ENVOY_LOG_MISC(info, "[mazu] secret_provider loading ok: {}", secret_provider->secret()->GetTypeName());
+  // auto secret_provider = context.clusterManager().clusterManagerFactory()
+  //   .secretManager().findOrCreateTlsCertificateProvider(
+  //     sds_config_store, sds_config.name(), 
+  //     transport_context, transport_context.serverFactoryContext().initManager());
 
-  // use the secret
-  if (secret_provider->secret() != nullptr) {
+  if (secret_provider == nullptr) {
+    throw EnvoyException("[mazu] Secret provider is null");
+  }
+
+  // auto what = secret_provider.get();
+
+  // secret_provider->addUpdateCallback(std::function<absl::Status ()> callback)
+  // secret_provider->addUpdateCallback([this]() -> absl::Status {
+  //   ENVOY_LOG_MISC(info, "[mazu] secret_provider callback called - what does it even do?");
+  //   return absl::OkStatus();
+  // });
+
+
+  if (secret_provider->secret() == nullptr) {
+    ENVOY_LOG_MISC(info, "[mazu] could not receive secret");
+  } else {
     auto secret = secret_provider->secret()->secret();
     ENVOY_LOG_MISC(info, "[mazu] received secret: {}", secret.filename());
   }
+  ENVOY_LOG_MISC(info, "[mazu] secret_provider : call to findOrCreateGenericSecretProvider was ok");
+
+  
+  // ENVOY_LOG_MISC(info, "[mazu] secret_provider loading ok: {}", *secret_provider);
+  // ENVOY_LOG_MISC(info, "[mazu] secret_provider.get() check if there's secret: {}", secret_provider.get()->secret()->ByteSizeLong());
+  
+  // secret_provider->secret()->In  
+
+  // use the secret
+  // if (secret_provider->secret() != nullptr) {
+  //   auto secret = secret_provider->secret()->secret();
+  //   ENVOY_LOG_MISC(info, "[mazu] received secret: {}", secret.filename());
+  // } else {
+  //   ENVOY_LOG_MISC(info, "[mazu] could not receive secret");
+  // }
 }
 
 // old constructor

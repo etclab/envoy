@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package envoy.extensions.transport_sockets.tls.v3;
 
-import "envoy/config/core/v3/base.proto";
 import "envoy/extensions/transport_sockets/tls/v3/secret.proto";
 
 import "udpa/annotations/status.proto";
@@ -15,7 +14,7 @@ option go_package = "github.com/envoyproxy/go-control-plane/envoy/extensions/tra
 option (udpa.annotations.file_status).package_version_status = ACTIVE;
 
 message RBECertValidatorConfig {
-  config.core.v3.DataSource pod_validity_map = 1;
+  // config.core.v3.DataSource pod_validity_map = 1;
 
   SdsSecretConfig pod_validity_sds = 2;
 }
