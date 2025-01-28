@@ -493,9 +493,8 @@ public:
 
 absl::Status InstanceBase::initializeOrThrow(Network::Address::InstanceConstSharedPtr local_address,
                                              ComponentFactory& component_factory) {
-  ENVOY_LOG(info, "MAZU logged here again");
-  
-  ENVOY_LOG(info, "Collin was here (again again)!");
+
+  ENVOY_LOG(info, "[mazu] starts here again - checking if builds correctly");
 
   try {
     KubernetesClient client;
