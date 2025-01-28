@@ -287,7 +287,7 @@ envoy_cmake(
         # FindOpenSSL.cmake which fails at what looks like version parsing
         # (the libraries are found ok).
         "CURL_CA_PATH": "none",
-        "CURL_USE_OPENSSL": "off",
+        "CURL_USE_OPENSSL": "on",
         "OPENSSL_ROOT_DIR": "$EXT_BUILD_DEPS",
         # Avoid libidn2
         "USE_LIBIDN2": "off",
@@ -465,6 +465,57 @@ envoy_cmake(
         "//conditions:default": ["libzstd.a"],
     }),
     working_directory = "build/cmake",
+)
+
+envoy_cmake(
+    name = "kube_c_client",
+    cache_entries = {
+        # CMAKE
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "CMAKE_CXX_COMPILER_FORCED": "ON",
+        "CMAKE_POSITION_INDEPENDENT_CODE": "ON",
+        "CMAKE_CXX_FLAGS": "-fPIC",  
+
+        # ZLIB
+        "ZLIB_LIBRARY": "$EXT_BUILD_DEPS/zlib",
+        "ZLIB_INCLUDE_DIR": "$EXT_BUILD_DEPS/zlib/include",
+
+        # YAML
+        "yaml_DIR": "$EXT_BUILD_DEPS/libyaml/cmake",
+    },
+    lib_source = "@com_github_etclab_kube_c_client//:kubernetes",
+    out_static_libs = ["libkubernetes.a"],
+    deps = [
+        ":curl",
+        ":zlib",
+        ":libyaml",
+        ":libwebsockets",
+        ":ares",
+        "//contrib/vcl/source:vpp_vcl",
+        "@boringssl//:ssl"
+    ]
+)
+
+envoy_cmake(
+    name = "libwebsockets",
+    cache_entries = {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "DISABLE_WERROR": "ON",
+    },
+    lib_source = "@com_github_warmcat_libwebsockets//:all",
+)
+
+envoy_cmake(
+    name = "libyaml",
+    cache_entries = {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_LIBDIR": "lib",
+        "DBUILD_TESTING": "OFF",
+        "DBUILD_SHARED_LIBS": "OFF",
+    },
+    lib_source = "@com_github_yaml_libyaml//:all",
 )
 
 envoy_cmake(

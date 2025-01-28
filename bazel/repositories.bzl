@@ -164,6 +164,9 @@ def envoy_dependencies(skip_targets = []):
     _com_github_google_benchmark()
     _com_github_google_jwt_verify()
     _com_github_google_libprotobuf_mutator()
+    _com_github_etclab_kube_c_client()
+    _com_github_warmcat_libwebsockets()
+    _com_github_yaml_libyaml()
     _com_github_google_libsxg()
     _com_github_google_tcmalloc()
     _com_github_gperftools_gperftools()
@@ -358,6 +361,24 @@ def _com_github_google_libprotobuf_mutator():
     external_http_archive(
         name = "com_github_google_libprotobuf_mutator",
         build_file = "@envoy//bazel/external:libprotobuf_mutator.BUILD",
+    )
+
+def _com_github_etclab_kube_c_client():
+    external_http_archive(
+        name = "com_github_etclab_kube_c_client",
+        build_file_content = """filegroup(name = "kubernetes", srcs = glob(["kubernetes/**"]), visibility = ["//visibility:public"])"""
+    )
+
+def _com_github_warmcat_libwebsockets():
+    external_http_archive(
+        name = "com_github_warmcat_libwebsockets",
+        build_file_content = """filegroup(name = "all", srcs = glob(["*"], exclude_directories=0), visibility = ["//visibility:public"])"""
+    )
+
+def _com_github_yaml_libyaml():
+    external_http_archive(
+        name = "com_github_yaml_libyaml",
+        build_file_content = BUILD_ALL_CONTENT,
     )
 
 def _com_github_google_libsxg():

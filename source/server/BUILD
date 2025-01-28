@@ -466,6 +466,8 @@ envoy_cc_library(
         "@com_google_absl//absl/types:optional",
         "@envoy_api//envoy/admin/v3:pkg_cc_proto",
         "@envoy_api//envoy/config/bootstrap/v3:pkg_cc_proto",
+        "//bazel/foreign_cc:kube_c_client",
+        "@boringssl//:ssl"
     ],
 )
 
