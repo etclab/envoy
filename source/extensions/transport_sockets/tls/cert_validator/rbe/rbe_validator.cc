@@ -6,6 +6,7 @@
 #include <openssl/x509.h>
 #include <sstream>
 #include <fstream>
+#include <typeinfo>
 #include <nlohmann/json.hpp>
 
 #include "envoy/extensions/transport_sockets/tls/v3/common.pb.h"
@@ -57,26 +58,7 @@ RBEValidator::RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig*
   for (auto& el : json_obj.items()) {
     pod_validity_map_[el.key()] = el.value().get<bool>();
   }
-
-  auto sds_config = rbeConfig.pod_validity_sds();
-  ENVOY_LOG_MISC(info, "[mazu] sds config loading ok: {}", sds_config.DebugString());
-
-  const auto& sds_config_store = sds_config.sds_config();
-  ENVOY_LOG_MISC(info, "[mazu] sds config store loading ok: {}", sds_config_store.DebugString());
-
-  auto& transport_context = dynamic_cast<Server::Configuration::TransportSocketFactoryContext&>(context);
-  auto secret_provider = context.clusterManager().clusterManagerFactory()
-    .secretManager().findOrCreateGenericSecretProvider(
-      sds_config_store, "pod_validity_map", transport_context,
-      transport_context.initManager());
-
-  ENVOY_LOG_MISC(info, "[mazu] secret_provider loading ok: {}", secret_provider->secret()->GetTypeName());
-
-  // use the secret
-  if (secret_provider->secret() != nullptr) {
-    auto secret = secret_provider->secret()->secret();
-    ENVOY_LOG_MISC(info, "[mazu] received secret: {}", secret.filename());
-  }
+  ENVOY_LOG_MISC(info, "[mazu] pod validity map: {}", pod_validity_map_);
 }
 
 // old constructor
@@ -298,6 +280,8 @@ ValidationResults RBEValidator::doVerifyCertChain(
                                       absl::nullopt};
     }
   }
+
+  // TODO: how would the new updates to rbe id change this?
   ENVOY_LOG_MISC(info, "[mazu] pod with key {} is invalid", pod_key);
   return ValidationResults{ValidationResults::ValidationStatus::Failed,
                                       Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt,
