@@ -208,8 +208,8 @@ build_and_maybe_push_image () {
         "${BUILD_COMMAND[@]}"
         "--platform" "${platform}"
         "${args[@]}"
-        -t "${build_tag}"
-        # -t "${DOCKER_USER}/envoy-debug-dev"
+        # -t "${build_tag}"
+        -t "${DOCKER_USER}/envoy-debug-dev"
         .)
     echo ">> ${action}: ${build_tag}"
     echo "> docker ${docker_build_args[*]}"
