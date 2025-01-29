@@ -93,8 +93,8 @@ config_env() {
 }
 
 # "-google-vrp" must come afer "" to ensure we rebuild the local base image dependency.
-# BUILD_TYPES=("" "-debug" "-contrib" "-contrib-debug" "-distroless" "-google-vrp" "-tools")
-BUILD_TYPES=("-debug")
+BUILD_TYPES=("" "-debug" "-contrib" "-contrib-debug" "-distroless" "-google-vrp" "-tools")
+# BUILD_TYPES=("-debug")
 
 # Configure docker-buildx tools
 BUILD_COMMAND=("buildx" "build")
@@ -208,8 +208,8 @@ build_and_maybe_push_image () {
         "${BUILD_COMMAND[@]}"
         "--platform" "${platform}"
         "${args[@]}"
-        # -t "${build_tag}"
-        -t "${DOCKER_USER}/envoy-debug-dev"
+        -t "${build_tag}"
+        # -t "${DOCKER_USER}/envoy-debug-dev"
         .)
     echo ">> ${action}: ${build_tag}"
     echo "> docker ${docker_build_args[*]}"
