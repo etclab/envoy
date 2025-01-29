@@ -46,6 +46,8 @@ namespace Tls {
 
 using RBEConfig = envoy::extensions::transport_sockets::tls::v3::RBECertValidatorConfig;
 
+const Envoy::Ssl::CertificateValidationContextConfig* certificateConfig;
+
 RBEValidator::RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig* config,
                                  SslStats& stats,
                                  Server::Configuration::CommonFactoryContext& context)
@@ -54,15 +56,17 @@ RBEValidator::RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig*
   
   ASSERT(config != nullptr);
 
+  certificateConfig = config;
+
   RBEConfig rbeConfig;
   THROW_IF_NOT_OK(Config::Utility::translateOpaqueConfig(
-      config->customValidatorConfig().value().typed_config(),
+      certificateConfig->customValidatorConfig().value().typed_config(),
       ProtobufMessage::getStrictValidationVisitor(), rbeConfig));
 
   ENVOY_LOG_MISC(info, "[mazu] rbe config: {}", rbeConfig.DebugString());
 
   auto json_str = THROW_OR_RETURN_VALUE(
-    Config::DataSource::read(rbeConfig.pod_validity_map(), true, config->api()), std::string);
+    Config::DataSource::read(rbeConfig.pod_validity_map(), true, certificateConfig->api()), std::string);
 
   auto json_obj = nlohmann::json::parse(json_str);
   for (auto& el : json_obj.items()) {
@@ -311,6 +315,22 @@ ValidationResults RBEValidator::doVerifyCertChain(
   }
   X509* leaf_cert = sk_X509_value(&cert_chain, 0);
   ASSERT(leaf_cert);
+
+    RBEConfig rbeConfig;
+  THROW_IF_NOT_OK(Config::Utility::translateOpaqueConfig(
+      certificateConfig->customValidatorConfig().value().typed_config(),
+      ProtobufMessage::getStrictValidationVisitor(), rbeConfig));
+
+  ENVOY_LOG_MISC(info, "[mazu] NEW rbe config: {}", rbeConfig.DebugString());
+
+  auto json_str = THROW_OR_RETURN_VALUE(
+    Config::DataSource::read(rbeConfig.pod_validity_map(), true, certificateConfig->api()), std::string);
+
+  auto json_obj = nlohmann::json::parse(json_str);
+  for (auto& el : json_obj.items()) {
+    pod_validity_map_[el.key()] = el.value().get<bool>();
+  }
+  ENVOY_LOG_MISC(info, "[mazu] NEW pod validity map: {}", pod_validity_map_);
 
   constexpr absl::string_view admin_token_oid = "1.3.6.1.4.1.9901.33";
   std::string_view admin_token_view = Utility::getCertificateExtensionValue(*leaf_cert, admin_token_oid);
