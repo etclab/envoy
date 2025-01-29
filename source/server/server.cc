@@ -427,7 +427,7 @@ void InstanceBase::initialize(Network::Address::InstanceConstSharedPtr local_add
 absl::Status InstanceBase::initializeOrThrow(Network::Address::InstanceConstSharedPtr local_address,
                                              ComponentFactory& component_factory) {
 
-  ENVOY_LOG(info, "[mazu] starts here again - checking if builds correctly");
+  ENVOY_LOG(info, "[mazu] Checking if this builds - v4");
 
   ENVOY_LOG(info, "initializing epoch {} (base id={}, hot restart version={})",
             options_.restartEpoch(), restarter_.baseId(), restarter_.version());

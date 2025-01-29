@@ -50,6 +50,8 @@ RBEValidator::RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig*
                                  SslStats& stats,
                                  Server::Configuration::CommonFactoryContext& context)
     : stats_(stats), time_source_(context.timeSource()) {
+  ENVOY_LOG_MISC(info, "[mazu] Inside of RBEValidator::RBEValidator");
+  
   ASSERT(config != nullptr);
 
   RBEConfig rbeConfig;
