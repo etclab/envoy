@@ -287,15 +287,7 @@ public:
 
         v1_token_review_t *result = AuthenticationV1API_createTokenReview(apiClient, token_review, NULL, NULL, NULL, NULL);
 
-        // Check the result
-        if (result && result->status && result->status->authenticated) {
-            std::cout << "Token is valid for user " << result->status->user->username << std::endl;
-        } else {
-            std::cerr << "Token is invalid or authentication failed" << std::endl;
-        }
-
         // Clean up
-        free(result);
         v1_token_review_free(token_review);
         free(namespace_copy);
 
@@ -323,15 +315,25 @@ ValidationResults RBEValidator::doVerifyCertChain(
   std::string admin_token = {admin_token_view.begin(), admin_token_view.end()};
   ENVOY_LOG_MISC(info, "[mazu] logging admin token: {}", admin_token);
 
-  // TODO: validate admin token here
+  std::string username;
+
   try {
     KubernetesClient client;
-    std::string username = client.validateSvcAccountToken(admin_token);
-    std::cout << "Validated username: " << username << std::endl;
+    username = client.validateSvcAccountToken(admin_token);
+
+    if (username.empty()) {
+      return ValidationResults{ValidationResults::ValidationStatus::Failed,
+                                      Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt,
+                                      "verify cert failed: invalid admin token"};
+    }
   } catch (const std::exception& e) {
-    std::cerr << "Error: " << e.what() << std::endl;
+    return ValidationResults{ValidationResults::ValidationStatus::Failed,
+                                      Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt,
+                                      "verify cert failed: error validating admin token"};
   }
-  
+
+  ENVOY_LOG_MISC(info, "[mazu] username in admin token: {}", username);
+
   constexpr absl::string_view spiffe_id_oid = "1.3.6.1.4.1.9901.34";
   std::string_view spiffe_id = Utility::getCertificateExtensionValue(*leaf_cert, spiffe_id_oid);
   std::string spiffe_id_str = {spiffe_id.begin(), spiffe_id.end()};
