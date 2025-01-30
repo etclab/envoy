@@ -38,6 +38,5 @@ envoy_cc_extension(
         "@envoy_api//envoy/extensions/transport_sockets/tls/v3:pkg_cc_proto",
         "@com_github_nlohmann_json//:json",
         "//bazel/foreign_cc:kube_c_client",
-        "@boringssl//:ssl"
     ],
 )
