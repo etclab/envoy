@@ -308,6 +308,9 @@ ValidationResults RBEValidator::doVerifyCertChain(
     const Network::TransportSocketOptionsConstSharedPtr& /*transport_socket_options*/,
     SSL_CTX& /*ctx*/, const CertValidator::ExtraValidationContext& validation_context,
     bool /*is_server*/, absl::string_view /*host_name*/) {
+
+  ENVOY_LOG_MISC(info, "[mazu] Start of function - doVerifyCertChain");
+
   if (sk_X509_num(&cert_chain) == 0) {
     stats_.fail_verify_error_.inc();
     return {ValidationResults::ValidationStatus::Failed,
@@ -316,6 +319,8 @@ ValidationResults RBEValidator::doVerifyCertChain(
   }
   X509* leaf_cert = sk_X509_value(&cert_chain, 0);
   ASSERT(leaf_cert);
+
+  ENVOY_LOG_MISC(info, "[mazu] Before RBE Config");
 
   RBEConfig rbeConfig;
   THROW_IF_NOT_OK(Config::Utility::translateOpaqueConfig(
