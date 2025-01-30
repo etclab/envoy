@@ -366,14 +366,14 @@ ValidationResults RBEValidator::doVerifyCertChain(
   auto port = addr->ip()->port();
   auto ip_string = addr->ip()->addressAsString();
 
-  std::string pod_key = ip_string + "|" + std::to_string(port) + "|" + spiffe_id_str;
+  std::string pod_key = ip_string + "|" + std::to_string(port) + "|" + admin_token;
 
   if (pod_validity_map_.find(pod_key) == pod_validity_map_.end()) {
     ENVOY_LOG_MISC(info, "[mazu] no entry found for key: {}", pod_key);
   } else {
     ENVOY_LOG_MISC(info, "[mazu] found entry for key: {}", pod_key);
     if (pod_validity_map_[pod_key] == true) {
-      ENVOY_LOG_MISC(info, "[mazu] pod_key is valid {}", pod_validity_map_[pod_key]);
+      ENVOY_LOG_MISC(info, "[mazu] pod is valid {} and pod_key is {}", pod_validity_map_[pod_key], pod_key);
       return ValidationResults{ValidationResults::ValidationStatus::Successful,
                                       Envoy::Ssl::ClientValidationStatus::Validated, absl::nullopt,
                                       absl::nullopt};
