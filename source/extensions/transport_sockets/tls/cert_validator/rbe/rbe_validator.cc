@@ -63,7 +63,7 @@ RBEValidator::RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig*
       certificateConfig->customValidatorConfig().value().typed_config(),
       ProtobufMessage::getStrictValidationVisitor(), rbeConfig));
 
-  ENVOY_LOG_MISC(info, "[mazu] rbe config: {}", rbeConfig.DebugString());
+  ENVOY_LOG_MISC(info, "[mazu] Initial RBE Config: {}", rbeConfig.DebugString());
 
   auto json_str = THROW_OR_RETURN_VALUE(
     Config::DataSource::read(rbeConfig.pod_validity_map(), true, certificateConfig->api()), std::string);
@@ -72,7 +72,8 @@ RBEValidator::RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig*
   for (auto& el : json_obj.items()) {
     pod_validity_map_[el.key()] = el.value().get<bool>();
   }
-  ENVOY_LOG_MISC(info, "[mazu] pod validity map: {}", pod_validity_map_);
+
+  ENVOY_LOG_MISC(info, "[mazu] Initial Pod Validity Map: {}", pod_validity_map_);
 }
 
 // old constructor
@@ -316,12 +317,12 @@ ValidationResults RBEValidator::doVerifyCertChain(
   X509* leaf_cert = sk_X509_value(&cert_chain, 0);
   ASSERT(leaf_cert);
 
-    RBEConfig rbeConfig;
+  RBEConfig rbeConfig;
   THROW_IF_NOT_OK(Config::Utility::translateOpaqueConfig(
       certificateConfig->customValidatorConfig().value().typed_config(),
       ProtobufMessage::getStrictValidationVisitor(), rbeConfig));
 
-  ENVOY_LOG_MISC(info, "[mazu] NEW rbe config: {}", rbeConfig.DebugString());
+  ENVOY_LOG_MISC(info, "[mazu] Updated RBE Config: {}", rbeConfig.DebugString());
 
   auto json_str = THROW_OR_RETURN_VALUE(
     Config::DataSource::read(rbeConfig.pod_validity_map(), true, certificateConfig->api()), std::string);
@@ -330,12 +331,12 @@ ValidationResults RBEValidator::doVerifyCertChain(
   for (auto& el : json_obj.items()) {
     pod_validity_map_[el.key()] = el.value().get<bool>();
   }
-  ENVOY_LOG_MISC(info, "[mazu] NEW pod validity map: {}", pod_validity_map_);
+  ENVOY_LOG_MISC(info, "[mazu] Updated Pod Validity Map: {}", pod_validity_map_);
 
   constexpr absl::string_view admin_token_oid = "1.3.6.1.4.1.9901.33";
   std::string_view admin_token_view = Utility::getCertificateExtensionValue(*leaf_cert, admin_token_oid);
   std::string admin_token = {admin_token_view.begin(), admin_token_view.end()};
-  ENVOY_LOG_MISC(info, "[mazu] logging admin token: {}", admin_token);
+  ENVOY_LOG_MISC(info, "[mazu] Admin token: {}", admin_token);
 
   std::string username;
 
@@ -354,7 +355,7 @@ ValidationResults RBEValidator::doVerifyCertChain(
                                       "verify cert failed: error validating admin token"};
   }
 
-  ENVOY_LOG_MISC(info, "[mazu] username in admin token: {}", username);
+  ENVOY_LOG_MISC(info, "[mazu] Admin Token Username: {}", username);
 
   constexpr absl::string_view spiffe_id_oid = "1.3.6.1.4.1.9901.34";
   std::string_view spiffe_id = Utility::getCertificateExtensionValue(*leaf_cert, spiffe_id_oid);
