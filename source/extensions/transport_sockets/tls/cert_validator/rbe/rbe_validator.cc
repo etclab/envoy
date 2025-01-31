@@ -317,6 +317,22 @@ ValidationResults RBEValidator::doVerifyCertChain(
             Envoy::Ssl::ClientValidationStatus::NotValidated, absl::nullopt,
             "verify cert failed: empty cert chain"};
   }
+  ENVOY_LOG_MISC(info, "[mazu] cert_chain size: {}", sk_X509_num(&cert_chain));
+
+  for (size_t i = 0; i < sk_X509_num(&cert_chain); i++) {
+    X509* leaf_cert = sk_X509_value(&cert_chain, i);
+    ASSERT(leaf_cert);
+    ENVOY_LOG_MISC(info, "[mazu] found leaf_cert at index:{}", i);
+    // get subject from cert
+    ENVOY_LOG_MISC(info, "[mazu] subject from cert: {}", Utility::getSubjectFromCertificate(*leaf_cert));
+    // get issuer from cert
+    ENVOY_LOG_MISC(info, "[mazu] subject from cert: {}", Utility::getIssuerFromCertificate(*leaf_cert));
+    // get subject alt names from cert
+    ENVOY_LOG_MISC(info, "[mazu] subject alt names from cert: {}", Utility::getSubjectAltNames(*leaf_cert, GEN_DNS));
+    // get extension oids from cert
+    ENVOY_LOG_MISC(info, "[mazu] extension oids from cert: {}", Utility::getCertificateExtensionOids(*leaf_cert));
+  }
+
   X509* leaf_cert = sk_X509_value(&cert_chain, 0);
   ASSERT(leaf_cert);
 
@@ -349,12 +365,15 @@ ValidationResults RBEValidator::doVerifyCertChain(
     KubernetesClient client;
     username = client.validateSvcAccountToken(admin_token);
 
+    ENVOY_LOG_MISC(info, "[mazu] username after client.validateSvcAccountToken: {}", username);
+
     if (username.empty()) {
       return ValidationResults{ValidationResults::ValidationStatus::Failed,
                                       Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt,
                                       "verify cert failed: invalid admin token"};
     }
   } catch (const std::exception& e) {
+    ENVOY_LOG_MISC(info, "[mazu] error validating admin token: {}", e.what());
     return ValidationResults{ValidationResults::ValidationStatus::Failed,
                                       Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt,
                                       "verify cert failed: error validating admin token"};
