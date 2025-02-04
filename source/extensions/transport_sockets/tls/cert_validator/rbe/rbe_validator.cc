@@ -307,9 +307,11 @@ ValidationResults RBEValidator::doVerifyCertChain(
     STACK_OF(X509)& cert_chain, Ssl::ValidateResultCallbackPtr /*callback*/,
     const Network::TransportSocketOptionsConstSharedPtr& /*transport_socket_options*/,
     SSL_CTX& /*ctx*/, const CertValidator::ExtraValidationContext& validation_context,
-    bool /*is_server*/, absl::string_view /*host_name*/) {
+    bool is_server, absl::string_view host_name) {
 
   ENVOY_LOG_MISC(info, "[mazu] Start of function - doVerifyCertChain");
+  ENVOY_LOG_MISC(info, "[mazu] what is the host_name: {}", host_name);
+  ENVOY_LOG_MISC(info, "[mazu] what does is_server mean: {}", is_server);
 
   if (sk_X509_num(&cert_chain) == 0) {
     stats_.fail_verify_error_.inc();
@@ -390,6 +392,19 @@ ValidationResults RBEValidator::doVerifyCertChain(
   auto port = addr->ip()->port();
   auto ip_string = addr->ip()->addressAsString();
 
+  ENVOY_LOG_MISC(info, "[mazu] remote_addr: {}", addr->asString());
+  ENVOY_LOG_MISC(info, "[mazu] remote_addr: ip {}, port {}", ip_string, port);
+
+  if (is_server) {
+    // server get the ephemeral port instead of the actual service port
+    ENVOY_LOG_MISC(info, "[mazu] server get the ephemeral port instead of the (src) service port");
+    port = 9080;
+  }
+
+  auto direct_remote_addr = socket_callbacks->connection().connectionInfoProvider().directRemoteAddress();
+  auto direct_remote_addr_string = direct_remote_addr->asString();
+  ENVOY_LOG_MISC(info, "[mazu] direct_remote_addr_string: {}", direct_remote_addr_string);
+
   std::string pod_key = ip_string + "|" + std::to_string(port) + "|" + admin_token;
 
   if (pod_validity_map_.find(pod_key) == pod_validity_map_.end()) {
@@ -404,7 +419,7 @@ ValidationResults RBEValidator::doVerifyCertChain(
     }
   }
 
-  // TODO: how would the new updates to rbe id change this?
+  // TODO: compare with default_validator.cc
   ENVOY_LOG_MISC(info, "[mazu] pod with key {} is invalid", pod_key);
   return ValidationResults{ValidationResults::ValidationStatus::Failed,
                                       Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt,
