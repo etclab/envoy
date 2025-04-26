@@ -398,7 +398,8 @@ ValidationResults RBEValidator::doVerifyCertChain(
   if (is_server) {
     // server get the ephemeral port instead of the actual service port
     ENVOY_LOG_MISC(info, "[mazu] server get the ephemeral port instead of the (src) service port");
-    port = 9080;
+    // port = 9080;
+    port = 8080;
   }
 
   auto direct_remote_addr = socket_callbacks->connection().connectionInfoProvider().directRemoteAddress();
