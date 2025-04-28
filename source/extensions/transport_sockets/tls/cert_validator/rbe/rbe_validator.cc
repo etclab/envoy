@@ -395,18 +395,11 @@ ValidationResults RBEValidator::doVerifyCertChain(
   ENVOY_LOG_MISC(info, "[mazu] remote_addr: {}", addr->asString());
   ENVOY_LOG_MISC(info, "[mazu] remote_addr: ip {}, port {}", ip_string, port);
 
-  if (is_server) {
-    // server get the ephemeral port instead of the actual service port
-    ENVOY_LOG_MISC(info, "[mazu] server get the ephemeral port instead of the (src) service port");
-    // port = 9080;
-    port = 8080;
-  }
-
   auto direct_remote_addr = socket_callbacks->connection().connectionInfoProvider().directRemoteAddress();
   auto direct_remote_addr_string = direct_remote_addr->asString();
   ENVOY_LOG_MISC(info, "[mazu] direct_remote_addr_string: {}", direct_remote_addr_string);
 
-  std::string pod_key = ip_string + "|" + std::to_string(port) + "|" + admin_token;
+  std::string pod_key = ip_string + "|" + admin_token;
 
   if (pod_validity_map_.find(pod_key) == pod_validity_map_.end()) {
     ENVOY_LOG_MISC(info, "[mazu] no entry found for key: {}", pod_key);
