@@ -405,7 +405,7 @@ ValidationResults RBEValidator::doVerifyCertChain(
 
   auto socket_callbacks = validation_context.callbacks;
   auto addr = socket_callbacks->connection().connectionInfoProvider().remoteAddress();
-  auto port = addr->ip()->port();
+  // auto port = addr->ip()->port();
   auto ip_string = addr->ip()->addressAsString();
 
   // ENVOY_LOG_MISC(info, "[mazu] remote_addr: {}", addr->asString());
