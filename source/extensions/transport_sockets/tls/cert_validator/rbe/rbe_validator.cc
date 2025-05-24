@@ -1,5 +1,6 @@
 #include "source/extensions/transport_sockets/tls/cert_validator/rbe/rbe_validator.h"
 
+// #include <chrono>
 #include <openssl/safestack.h>
 
 #include <cstdint>
@@ -52,7 +53,7 @@ RBEValidator::RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig*
                                  SslStats& stats,
                                  Server::Configuration::CommonFactoryContext& context)
     : stats_(stats), time_source_(context.timeSource()) {
-  ENVOY_LOG_MISC(info, "[mazu] Inside of RBEValidator::RBEValidator");
+  // ENVOY_LOG_MISC(info, "[mazu] Inside of RBEValidator::RBEValidator");
   
   ASSERT(config != nullptr);
 
@@ -307,11 +308,11 @@ ValidationResults RBEValidator::doVerifyCertChain(
     STACK_OF(X509)& cert_chain, Ssl::ValidateResultCallbackPtr /*callback*/,
     const Network::TransportSocketOptionsConstSharedPtr& /*transport_socket_options*/,
     SSL_CTX& /*ctx*/, const CertValidator::ExtraValidationContext& validation_context,
-    bool is_server, absl::string_view host_name) {
+    bool /*is_server*/, absl::string_view /*host_name*/) {
 
-  ENVOY_LOG_MISC(info, "[mazu] Start of function - doVerifyCertChain");
-  ENVOY_LOG_MISC(info, "[mazu] what is the host_name: {}", host_name);
-  ENVOY_LOG_MISC(info, "[mazu] what does is_server mean: {}", is_server);
+  // ENVOY_LOG_MISC(info, "[mazu] Start of function - doVerifyCertChain");
+  // ENVOY_LOG_MISC(info, "[mazu] what is the host_name: {}", host_name);
+  // ENVOY_LOG_MISC(info, "[mazu] what does is_server mean: {}", is_server);
 
   if (sk_X509_num(&cert_chain) == 0) {
     stats_.fail_verify_error_.inc();
@@ -319,55 +320,70 @@ ValidationResults RBEValidator::doVerifyCertChain(
             Envoy::Ssl::ClientValidationStatus::NotValidated, absl::nullopt,
             "verify cert failed: empty cert chain"};
   }
-  ENVOY_LOG_MISC(info, "[mazu] cert_chain size: {}", sk_X509_num(&cert_chain));
+  // ENVOY_LOG_MISC(info, "[mazu] cert_chain size: {}", sk_X509_num(&cert_chain));
 
   for (size_t i = 0; i < sk_X509_num(&cert_chain); i++) {
     X509* leaf_cert = sk_X509_value(&cert_chain, i);
     ASSERT(leaf_cert);
-    ENVOY_LOG_MISC(info, "[mazu] found leaf_cert at index:{}", i);
+    // ENVOY_LOG_MISC(info, "[mazu] found leaf_cert at index:{}", i);
     // get subject from cert
-    ENVOY_LOG_MISC(info, "[mazu] subject from cert: {}", Utility::getSubjectFromCertificate(*leaf_cert));
+    // ENVOY_LOG_MISC(info, "[mazu] subject from cert: {}", Utility::getSubjectFromCertificate(*leaf_cert));
     // get issuer from cert
-    ENVOY_LOG_MISC(info, "[mazu] subject from cert: {}", Utility::getIssuerFromCertificate(*leaf_cert));
+    // ENVOY_LOG_MISC(info, "[mazu] subject from cert: {}", Utility::getIssuerFromCertificate(*leaf_cert));
     // get subject alt names from cert
-    ENVOY_LOG_MISC(info, "[mazu] subject alt names from cert: {}", Utility::getSubjectAltNames(*leaf_cert, GEN_DNS));
+    // ENVOY_LOG_MISC(info, "[mazu] subject alt names from cert: {}", Utility::getSubjectAltNames(*leaf_cert, GEN_DNS));
     // get extension oids from cert
-    ENVOY_LOG_MISC(info, "[mazu] extension oids from cert: {}", Utility::getCertificateExtensionOids(*leaf_cert));
+    // ENVOY_LOG_MISC(info, "[mazu] extension oids from cert: {}", Utility::getCertificateExtensionOids(*leaf_cert));
   }
 
   X509* leaf_cert = sk_X509_value(&cert_chain, 0);
   ASSERT(leaf_cert);
 
-  ENVOY_LOG_MISC(info, "[mazu] Before RBE Config");
+  // ENVOY_LOG_MISC(info, "[mazu] Before RBE Config");
 
   RBEConfig rbeConfig;
   THROW_IF_NOT_OK(Config::Utility::translateOpaqueConfig(
       certificateConfig->customValidatorConfig().value().typed_config(),
       ProtobufMessage::getStrictValidationVisitor(), rbeConfig));
 
-  ENVOY_LOG_MISC(info, "[mazu] Updated RBE Config: {}", rbeConfig.DebugString());
+  // ENVOY_LOG_MISC(info, "[mazu] Updated RBE Config: {}", rbeConfig.DebugString());
 
+  // TODO: measure the time taken for this call
+  // ------------------------------------------
+  // const auto start = time_source_.monotonicTime();
   auto json_str = THROW_OR_RETURN_VALUE(
     Config::DataSource::read(rbeConfig.pod_validity_map(), true, certificateConfig->api()), std::string);
+
+  // const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+  //   time_source_.monotonicTime() - start).count();
+  // ENVOY_LOG_MISC(info, "[mazu] latency to read pod validity map: {} ms", elapsed);
 
   auto json_obj = nlohmann::json::parse(json_str);
   for (auto& el : json_obj.items()) {
     pod_validity_map_[el.key()] = el.value().get<bool>();
   }
-  ENVOY_LOG_MISC(info, "[mazu] Updated Pod Validity Map: {}", pod_validity_map_);
+  // ENVOY_LOG_MISC(info, "[mazu] Updated Pod Validity Map: {}", pod_validity_map_);
 
   constexpr absl::string_view admin_token_oid = "1.3.6.1.4.1.9901.33";
   std::string_view admin_token_view = Utility::getCertificateExtensionValue(*leaf_cert, admin_token_oid);
   std::string admin_token = {admin_token_view.begin(), admin_token_view.end()};
-  ENVOY_LOG_MISC(info, "[mazu] Admin token: {}", admin_token);
+  // ENVOY_LOG_MISC(info, "[mazu] Admin token: {}", admin_token);
 
   std::string username;
 
   try {
     KubernetesClient client;
+    // TODO: measure the time taken for this call
+    // ------------------------------------------
+    // const auto start = time_source_.monotonicTime();
+    
     username = client.validateSvcAccountToken(admin_token);
+    
+    // const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+    //   time_source_.monotonicTime() - start).count();
+    // ENVOY_LOG_MISC(info, "[mazu] latency to validate service account token: {} ms", elapsed);
 
-    ENVOY_LOG_MISC(info, "[mazu] username after client.validateSvcAccountToken: {}", username);
+    // ENVOY_LOG_MISC(info, "[mazu] username after client.validateSvcAccountToken: {}", username);
 
     if (username.empty()) {
       return ValidationResults{ValidationResults::ValidationStatus::Failed,
@@ -375,13 +391,13 @@ ValidationResults RBEValidator::doVerifyCertChain(
                                       "verify cert failed: invalid admin token"};
     }
   } catch (const std::exception& e) {
-    ENVOY_LOG_MISC(info, "[mazu] error validating admin token: {}", e.what());
+    // ENVOY_LOG_MISC(info, "[mazu] error validating admin token: {}", e.what());
     return ValidationResults{ValidationResults::ValidationStatus::Failed,
                                       Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt,
                                       "verify cert failed: error validating admin token"};
   }
 
-  ENVOY_LOG_MISC(info, "[mazu] Admin Token Username: {}", username);
+  // ENVOY_LOG_MISC(info, "[mazu] Admin Token Username: {}", username);
 
   constexpr absl::string_view spiffe_id_oid = "1.3.6.1.4.1.9901.34";
   std::string_view spiffe_id = Utility::getCertificateExtensionValue(*leaf_cert, spiffe_id_oid);
@@ -392,21 +408,21 @@ ValidationResults RBEValidator::doVerifyCertChain(
   auto port = addr->ip()->port();
   auto ip_string = addr->ip()->addressAsString();
 
-  ENVOY_LOG_MISC(info, "[mazu] remote_addr: {}", addr->asString());
-  ENVOY_LOG_MISC(info, "[mazu] remote_addr: ip {}, port {}", ip_string, port);
+  // ENVOY_LOG_MISC(info, "[mazu] remote_addr: {}", addr->asString());
+  // ENVOY_LOG_MISC(info, "[mazu] remote_addr: ip {}, port {}", ip_string, port);
 
   auto direct_remote_addr = socket_callbacks->connection().connectionInfoProvider().directRemoteAddress();
   auto direct_remote_addr_string = direct_remote_addr->asString();
-  ENVOY_LOG_MISC(info, "[mazu] direct_remote_addr_string: {}", direct_remote_addr_string);
+  // ENVOY_LOG_MISC(info, "[mazu] direct_remote_addr_string: {}", direct_remote_addr_string);
 
   std::string pod_key = ip_string + "|" + admin_token;
 
   if (pod_validity_map_.find(pod_key) == pod_validity_map_.end()) {
-    ENVOY_LOG_MISC(info, "[mazu] no entry found for key: {}", pod_key);
+    // ENVOY_LOG_MISC(info, "[mazu] no entry found for key: {}", pod_key);
   } else {
-    ENVOY_LOG_MISC(info, "[mazu] found entry for key: {}", pod_key);
+    // ENVOY_LOG_MISC(info, "[mazu] found entry for key: {}", pod_key);
     if (pod_validity_map_[pod_key] == true) {
-      ENVOY_LOG_MISC(info, "[mazu] pod is valid {} and pod_key is {}", pod_validity_map_[pod_key], pod_key);
+      // ENVOY_LOG_MISC(info, "[mazu] pod is valid {} and pod_key is {}", pod_validity_map_[pod_key], pod_key);
       return ValidationResults{ValidationResults::ValidationStatus::Successful,
                                       Envoy::Ssl::ClientValidationStatus::Validated, absl::nullopt,
                                       absl::nullopt};
@@ -414,7 +430,7 @@ ValidationResults RBEValidator::doVerifyCertChain(
   }
 
   // TODO: compare with default_validator.cc
-  ENVOY_LOG_MISC(info, "[mazu] pod with key {} is invalid", pod_key);
+  // ENVOY_LOG_MISC(info, "[mazu] pod with key {} is invalid", pod_key);
   return ValidationResults{ValidationResults::ValidationStatus::Failed,
                                       Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt,
                                       "verify cert failed: invalid pod"};
