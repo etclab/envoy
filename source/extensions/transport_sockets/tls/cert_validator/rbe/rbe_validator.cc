@@ -31,6 +31,7 @@
 
 #include "openssl/ssl.h"
 #include "openssl/x509v3.h"
+#include "openssl/md5.h"
 
 /*
 extern "C" {
@@ -185,6 +186,18 @@ absl::Status RBEValidator::addClientValidationContext(SSL_CTX* ctx, bool) {
   }
   SSL_CTX_set_client_CA_list(ctx, list.release());
   return absl::OkStatus();
+}
+
+std::string computeMd5FromString(const std::string& string) {
+  unsigned char digest[MD5_DIGEST_LENGTH];
+  MD5(reinterpret_cast<const unsigned char*>(string.c_str()), string.size(), digest);
+
+  std::ostringstream ss;
+  ss << std::hex << std::setfill('0');
+  for (const auto& byte : digest) {
+    ss << std::setw(2) << static_cast<int>(byte);
+  }
+  return ss.str();
 }
 
 // no need to change: `ca_certs_` will be empty
@@ -371,6 +384,7 @@ ValidationResults RBEValidator::doVerifyCertChain(
   constexpr absl::string_view admin_token_oid = "1.3.6.1.4.1.9901.33";
   std::string_view admin_token_view = Utility::getCertificateExtensionValue(*leaf_cert, admin_token_oid);
   std::string admin_token = {admin_token_view.begin(), admin_token_view.end()};
+  std::string admin_token_md5 = computeMd5FromString(admin_token);
   // ENVOY_LOG_MISC(info, "[mazu] Admin token: {}", admin_token);
 
   /*
@@ -421,7 +435,8 @@ ValidationResults RBEValidator::doVerifyCertChain(
   auto direct_remote_addr_string = direct_remote_addr->asString();
   // ENVOY_LOG_MISC(info, "[mazu] direct_remote_addr_string: {}", direct_remote_addr_string);
 
-  std::string pod_key = ip_string + "|" + admin_token;
+  // std::string pod_key = ip_string + "|" + admin_token;
+  std::string pod_key = ip_string + "|" + admin_token_md5;
 
   if (pod_validity_map_.find(pod_key) == pod_validity_map_.end()) {
     // ENVOY_LOG_MISC(info, "[mazu] no entry found for key: {}", pod_key);
