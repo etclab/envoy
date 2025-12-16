@@ -33,7 +33,7 @@
 #include "openssl/x509v3.h"
 #include "openssl/md5.h"
 
-/*
+
 extern "C" {
 #include <kubernetes/config/kube_config.h>
 #include <kubernetes/config/incluster_config.h>
@@ -41,7 +41,6 @@ extern "C" {
 #include <kubernetes/model/v1_token_review_spec.h>
 #include <kubernetes/model/v1_token_review.h>
 }
-*/
 
 namespace Envoy {
 namespace Extensions {
@@ -267,7 +266,7 @@ absl::StatusOr<int> RBEValidator::initializeSslContexts(std::vector<SSL_CTX*>, b
 //   return san_match;
 // }
 
-/*
+
 class KubernetesClient {
 private:
     char* basePath;
@@ -318,7 +317,6 @@ public:
         return result && result->status && result->status->authenticated ? result->status->user->username : "";
     }
 };
-*/
 
 // overridden
 ValidationResults RBEValidator::doVerifyCertChain(
@@ -387,7 +385,6 @@ ValidationResults RBEValidator::doVerifyCertChain(
   std::string admin_token_md5 = computeMd5FromString(admin_token);
   // ENVOY_LOG_MISC(info, "[mazu] Admin token: {}", admin_token);
 
-  /*
   std::string username;
 
   try {
@@ -415,7 +412,6 @@ ValidationResults RBEValidator::doVerifyCertChain(
                                       Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt,
                                       "verify cert failed: error validating admin token"};
   }
-  */
 
   // ENVOY_LOG_MISC(info, "[mazu] Admin Token Username: {}", username);
 
