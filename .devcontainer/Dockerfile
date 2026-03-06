@@ -8,7 +8,9 @@ ENV BUILD_DIR=/build
 ENV ENVOY_STDLIB=libc++
 
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get -y update \
+RUN find /etc/apt/sources.list.d/ -name '*kubic*' -delete 2>/dev/null; \
+  sed -i '/kubic/d' /etc/apt/sources.list 2>/dev/null; \
+  apt-get -y update \
   && apt-get -y install --no-install-recommends libpython2.7 net-tools psmisc vim 2>&1 \
   # Create a non-root user to use if preferred - see https://aka.ms/vscode-remote/containers/non-root-user.
   && groupadd --gid $USER_GID $USERNAME \

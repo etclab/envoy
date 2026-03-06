@@ -2,10 +2,7 @@ syntax = "proto3";
 
 package envoy.extensions.transport_sockets.tls.v3;
 
-import "envoy/config/core/v3/base.proto";
-
 import "udpa/annotations/status.proto";
-import "validate/validate.proto";
 
 option java_package = "io.envoyproxy.envoy.extensions.transport_sockets.tls.v3";
 option java_outer_classname = "TlsRbeValidatorConfigProto";
@@ -13,6 +10,9 @@ option java_multiple_files = true;
 option go_package = "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3;tlsv3";
 option (udpa.annotations.file_status).package_version_status = ACTIVE;
 
+// RBECertValidatorConfig is the configuration for the RBE TLS certificate
+// validator. The validator calls the agent's ext_authz server via UDS for
+// live registration validation during each TLS handshake.
 message RBECertValidatorConfig {
-  config.core.v3.DataSource pod_validity_map = 1;
+  // Empty — validator calls ext_authz via UDS for live validation.
 }

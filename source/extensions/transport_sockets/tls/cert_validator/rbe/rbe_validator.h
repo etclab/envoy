@@ -3,6 +3,7 @@
 #include <array>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,9 @@
 #include "openssl/ssl.h"
 #include "openssl/x509v3.h"
 
+#include <grpcpp/grpcpp.h>
+#include "envoy/service/auth/v3/external_auth.grpc.pb.h"
+
 namespace Envoy {
 namespace Extensions {
 namespace TransportSockets {
@@ -33,7 +37,6 @@ using X509StorePtr = CSmartPtr<X509_STORE, X509_STORE_free>;
 
 class RBEValidator : public CertValidator {
 public:
-  // TODO: look at what info they have and what they're doing with all the info 
   RBEValidator(SslStats& stats, TimeSource& time_source)
       : stats_(stats), time_source_(time_source){};
   RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig* config, SslStats& stats,
@@ -83,7 +86,8 @@ private:
   std::vector<SanMatcherPtr> subject_alt_name_matchers_{};
   absl::flat_hash_map<std::string, X509StorePtr> trust_bundle_stores_;
   
-  std::map<std::string, bool> pod_validity_map_;
+  std::shared_ptr<grpc::Channel> ext_authz_channel_;
+  std::unique_ptr<envoy::service::auth::v3::Authorization::Stub> ext_authz_stub_;
 
   SslStats& stats_;
   TimeSource& time_source_;
