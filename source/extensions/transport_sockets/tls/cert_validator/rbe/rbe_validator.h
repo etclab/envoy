@@ -16,6 +16,8 @@
 
 #include "source/common/common/c_smart_ptr.h"
 #include "source/common/common/matchers.h"
+#include "source/common/common/posix/thread_impl.h"
+#include "source/common/common/thread.h"
 #include "source/common/stats/symbol_table.h"
 #include "source/common/tls/cert_validator/cert_validator.h"
 #include "source/common/tls/cert_validator/san_matcher.h"
@@ -35,15 +37,13 @@ namespace Tls {
 
 using X509StorePtr = CSmartPtr<X509_STORE, X509_STORE_free>;
 
-class RBEValidator : public CertValidator {
+class RBEValidator : public CertValidator, Logger::Loggable<Logger::Id::connection> {
 public:
   RBEValidator(SslStats& stats, TimeSource& time_source)
       : stats_(stats), time_source_(time_source){};
   RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig* config, SslStats& stats,
               Server::Configuration::CommonFactoryContext& context);
-  ~RBEValidator() override = default;
-
-  // what is the single most function (minimum number of functions) I need?
+  ~RBEValidator() override;
 
   // Tls::CertValidator
   absl::Status addClientValidationContext(SSL_CTX* context, bool require_client_cert) override;
@@ -76,6 +76,16 @@ public:
   bool matchSubjectAltName(X509& leaf_cert);
 
 private:
+  struct ValidationJob {
+    Ssl::ValidateResultCallbackPtr result_callback_;
+    Thread::PosixThreadPtr validation_thread_;
+  };
+
+  void performExtAuthzCheck(Event::Dispatcher* dispatcher,
+                            std::string admin_token, std::string ip_string);
+  void onVerificationComplete(const Thread::ThreadId& thread_id,
+                              bool success, const std::string& error_details);
+
   bool verifyCertChainUsingTrustBundleStore(X509& leaf_cert, STACK_OF(X509)* cert_chain,
                                             X509_VERIFY_PARAM* verify_param,
                                             std::string& error_details);
@@ -85,9 +95,13 @@ private:
   std::string ca_file_name_;
   std::vector<SanMatcherPtr> subject_alt_name_matchers_{};
   absl::flat_hash_map<std::string, X509StorePtr> trust_bundle_stores_;
-  
+
   std::shared_ptr<grpc::Channel> ext_authz_channel_;
   std::unique_ptr<envoy::service::auth::v3::Authorization::Stub> ext_authz_stub_;
+
+  absl::flat_hash_map<Thread::ThreadId, ValidationJob> validation_jobs_;
+  std::shared_ptr<size_t> alive_indicator_{new size_t(1)};
+  Thread::PosixThreadFactoryPtr thread_factory_;
 
   SslStats& stats_;
   TimeSource& time_source_;

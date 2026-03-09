@@ -36,14 +36,12 @@ namespace Tls {
 
 using RBEConfig = envoy::extensions::transport_sockets::tls::v3::RBECertValidatorConfig;
 
-const Envoy::Ssl::CertificateValidationContextConfig* certificateConfig;
-
 RBEValidator::RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig* config,
                                  SslStats& stats,
                                  Server::Configuration::CommonFactoryContext& context)
-    : stats_(stats), time_source_(context.timeSource()) {
+    : thread_factory_(Thread::PosixThreadFactory::create()),
+      stats_(stats), time_source_(context.timeSource()) {
   ASSERT(config != nullptr);
-  certificateConfig = config;
 
   // Initialize gRPC channel to the agent's ext_authz server via UDS.
   ext_authz_channel_ = grpc::CreateChannel(
@@ -52,6 +50,15 @@ RBEValidator::RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig*
   ext_authz_stub_ = envoy::service::auth::v3::Authorization::NewStub(ext_authz_channel_);
 
   ENVOY_LOG_MISC(info, "[mazu] RBEValidator initialized with ext_authz UDS channel");
+}
+
+RBEValidator::~RBEValidator() {
+  // Wait for all in-flight validation threads to finish.
+  for (auto& [id, job] : validation_jobs_) {
+    if (job.validation_thread_->joinable()) {
+      job.validation_thread_->join();
+    }
+  }
 }
 
 // no need to change: `ca_certs_` will be empty
@@ -98,7 +105,7 @@ absl::StatusOr<int> RBEValidator::initializeSslContexts(std::vector<SSL_CTX*>, b
 
 
 ValidationResults RBEValidator::doVerifyCertChain(
-    STACK_OF(X509)& cert_chain, Ssl::ValidateResultCallbackPtr /*callback*/,
+    STACK_OF(X509)& cert_chain, Ssl::ValidateResultCallbackPtr callback,
     const Network::TransportSocketOptionsConstSharedPtr& /*transport_socket_options*/,
     SSL_CTX& /*ctx*/, const CertValidator::ExtraValidationContext& validation_context,
     bool /*is_server*/, absl::string_view /*host_name*/) {
@@ -110,66 +117,130 @@ ValidationResults RBEValidator::doVerifyCertChain(
             "verify cert failed: empty cert chain"};
   }
 
+  if (callback == nullptr) {
+    stats_.fail_verify_error_.inc();
+    return {ValidationResults::ValidationStatus::Failed,
+            Envoy::Ssl::ClientValidationStatus::NotValidated, absl::nullopt,
+            "verify cert failed: no callback for async validation"};
+  }
+
   X509* leaf_cert = sk_X509_value(&cert_chain, 0);
   ASSERT(leaf_cert);
 
-  // 1. Extract admin token from cert (OID 1.3.6.1.4.1.9901.33)
+  // 1. Extract admin token from cert (OID 1.3.6.1.4.1.9901.33) — fast, CPU-only.
   constexpr absl::string_view admin_token_oid = "1.3.6.1.4.1.9901.33";
   std::string_view admin_token_view = Utility::getCertificateExtensionValue(*leaf_cert, admin_token_oid);
   std::string admin_token = {admin_token_view.begin(), admin_token_view.end()};
 
   if (admin_token.empty()) {
     stats_.fail_verify_error_.inc();
+    ENVOY_LOG_MISC(warn, "[mazu] doVerifyCertChain: admin token not found in cert");
     return {ValidationResults::ValidationStatus::Failed,
             Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt,
             "verify cert failed: admin token extension not found"};
   }
 
-  // 2. Get remote IP from the connection
+  // 2. Get remote IP from the connection — fast, in-process.
   auto socket_callbacks = validation_context.callbacks;
   auto addr = socket_callbacks->connection().connectionInfoProvider().remoteAddress();
   auto ip_string = addr->ip()->addressAsString();
 
-  ENVOY_LOG_MISC(info, "[mazu] doVerifyCertChain: calling ext_authz for ip={}", ip_string);
+  ENVOY_LOG_MISC(info, "[mazu] doVerifyCertChain: scheduling async ext_authz for ip={}", ip_string);
 
-  // 3. Build CheckRequest — send IP + token directly, no cert
+  // 3. Store callback in ValidationJob (preserving unique_ptr ownership).
+  ValidationJob job;
+  job.result_callback_ = std::move(callback);
+  Event::Dispatcher& dispatcher = job.result_callback_->dispatcher();
+
+  // 4. Create managed thread for blocking gRPC call.
+  job.validation_thread_ = thread_factory_->createThread(
+      [this, &dispatcher, admin_token = std::move(admin_token),
+       ip_string = std::move(ip_string)]() -> void {
+        performExtAuthzCheck(&dispatcher, std::move(admin_token), std::move(ip_string));
+      },
+      Thread::Options{}, /* crash_on_failure=*/false);
+
+  if (job.validation_thread_ == nullptr) {
+    stats_.fail_verify_error_.inc();
+    ENVOY_LOG_MISC(warn, "[mazu] doVerifyCertChain: failed to create validation thread");
+    return {ValidationResults::ValidationStatus::Failed,
+            Envoy::Ssl::ClientValidationStatus::NotValidated, absl::nullopt,
+            "Failed creating a thread for RBE cert validation."};
+  }
+
+  Thread::ThreadId thread_id = job.validation_thread_->pthreadId();
+  validation_jobs_[thread_id] = std::move(job);
+
+  // 5. Return Pending — worker thread is free to process other connections.
+  ENVOY_LOG_MISC(info, "[mazu] doVerifyCertChain: returning Pending for ip={}", ip_string);
+  return {ValidationResults::ValidationStatus::Pending,
+          Envoy::Ssl::ClientValidationStatus::NotValidated, absl::nullopt, absl::nullopt};
+}
+
+void RBEValidator::performExtAuthzCheck(Event::Dispatcher* dispatcher,
+                                        std::string admin_token, std::string ip_string) {
+  ENVOY_LOG_MISC(info, "[mazu] validation thread: starting gRPC call for ip={}", ip_string);
+
+  // Build CheckRequest
   envoy::service::auth::v3::CheckRequest check_req;
   auto* attrs = check_req.mutable_attributes();
   auto* src = attrs->mutable_source();
   src->mutable_address()->mutable_socket_address()->set_address(ip_string);
-
   auto* http_req = attrs->mutable_request()->mutable_http();
   auto& headers = *http_req->mutable_headers();
   headers["x-rbe-admin-token"] = admin_token;
 
-  // 4. Synchronous gRPC call to ext_authz via UDS
+  // Blocking gRPC call
   envoy::service::auth::v3::CheckResponse check_resp;
   grpc::ClientContext grpc_ctx;
   grpc_ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
   auto status = ext_authz_stub_->Check(&grpc_ctx, check_req, &check_resp);
 
+  bool success = false;
+  std::string error_details;
+
   if (!status.ok()) {
-    ENVOY_LOG_MISC(warn, "[mazu] doVerifyCertChain: ext_authz gRPC call failed: {}",
-                   status.error_message());
-    stats_.fail_verify_error_.inc();
-    return {ValidationResults::ValidationStatus::Failed,
-            Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt,
-            "RBE validation failed: ext_authz gRPC error"};
+    error_details = fmt::format("RBE ext_authz gRPC error: {}", status.error_message());
+    ENVOY_LOG_MISC(warn, "[mazu] validation thread: {}", error_details);
+  } else if (check_resp.status().code() != 0) {
+    error_details = fmt::format("RBE ext_authz denied: {}", check_resp.status().message());
+    ENVOY_LOG_MISC(warn, "[mazu] validation thread: {}", error_details);
+  } else {
+    success = true;
+    ENVOY_LOG_MISC(info, "[mazu] validation thread: passed for ip={}", ip_string);
   }
 
-  if (check_resp.status().code() != 0) {
-    ENVOY_LOG_MISC(warn, "[mazu] doVerifyCertChain: ext_authz denied: {}",
-                   check_resp.status().message());
-    stats_.fail_verify_error_.inc();
-    return {ValidationResults::ValidationStatus::Failed,
-            Envoy::Ssl::ClientValidationStatus::Failed, absl::nullopt,
-            "RBE validation failed via ext_authz"};
-  }
+  // Post result back to the Envoy worker thread with alive guard.
+  std::weak_ptr<size_t> weak_alive_indicator(alive_indicator_);
+  Thread::ThreadId thread_id = thread_factory_->currentPthreadId();
 
-  ENVOY_LOG_MISC(info, "[mazu] doVerifyCertChain: RBE validation passed for ip={}", ip_string);
-  return {ValidationResults::ValidationStatus::Successful,
-          Envoy::Ssl::ClientValidationStatus::Validated, absl::nullopt,
-          absl::nullopt};
+  dispatcher->post([weak_alive_indicator, this, thread_id, success,
+                    error_details = std::move(error_details)]() {
+    if (weak_alive_indicator.expired()) {
+      return;
+    }
+    onVerificationComplete(thread_id, success, error_details);
+  });
+}
+
+void RBEValidator::onVerificationComplete(const Thread::ThreadId& thread_id,
+                                          bool success, const std::string& error_details) {
+  ENVOY_LOG_MISC(info, "[mazu] worker thread: delivering result success={}", success);
+
+  auto job_handle = validation_jobs_.extract(thread_id);
+  if (job_handle.empty()) {
+    ENVOY_LOG_MISC(warn, "[mazu] worker thread: no job found for thread");
+    return;
+  }
+  ValidationJob& job = job_handle.mapped();
+  job.validation_thread_->join();
+
+  job.result_callback_->onCertValidationResult(
+      success,
+      success ? Envoy::Ssl::ClientValidationStatus::Validated
+              : Envoy::Ssl::ClientValidationStatus::Failed,
+      error_details,
+      SSL_AD_CERTIFICATE_UNKNOWN);
 }
 
 absl::optional<uint32_t> RBEValidator::daysUntilFirstCertExpires() const {
