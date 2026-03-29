@@ -184,6 +184,13 @@ void SslSocket::resumeHandshake() {
     ENVOY_CONN_LOG(debug, "async handshake completion error", callbacks_->connection());
     callbacks_->connection().close(Network::ConnectionCloseType::FlushWrite,
                                    "failed_resuming_async_handshake");
+  } else if (info_->state() == Ssl::SocketState::HandshakeComplete) {
+    // During async cert validation, BoringSSL's BIO may have already consumed
+    // application data from the kernel socket into its internal read buffer.
+    // With the kernel buffer drained, no further read events will fire.
+    // Signal that there is potentially buffered data to read so that doRead()
+    // is called and SSL_read() can extract it.
+    callbacks_->setTransportSocketIsReadable();
   }
 }
 

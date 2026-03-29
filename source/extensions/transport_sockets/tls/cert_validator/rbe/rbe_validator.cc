@@ -153,6 +153,7 @@ ValidationResults RBEValidator::doVerifyCertChain(
   Event::Dispatcher& dispatcher = job.result_callback_->dispatcher();
 
   // 4. Create managed thread for blocking gRPC call.
+  std::string ip_for_log = ip_string;
   job.validation_thread_ = thread_factory_->createThread(
       [this, &dispatcher, admin_token = std::move(admin_token),
        ip_string = std::move(ip_string)]() -> void {
@@ -172,7 +173,7 @@ ValidationResults RBEValidator::doVerifyCertChain(
   validation_jobs_[thread_id] = std::move(job);
 
   // 5. Return Pending — worker thread is free to process other connections.
-  ENVOY_LOG_MISC(info, "[mazu] doVerifyCertChain: returning Pending for ip={}", ip_string);
+  ENVOY_LOG_MISC(info, "[mazu] doVerifyCertChain: returning Pending for ip={}", ip_for_log);
   return {ValidationResults::ValidationStatus::Pending,
           Envoy::Ssl::ClientValidationStatus::NotValidated, absl::nullopt, absl::nullopt};
 }
