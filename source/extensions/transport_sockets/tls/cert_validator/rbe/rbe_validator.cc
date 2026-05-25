@@ -53,8 +53,16 @@ RBEValidator::RBEValidator(const Envoy::Ssl::CertificateValidationContextConfig*
 }
 
 RBEValidator::~RBEValidator() {
-  // Wait for all in-flight validation threads to finish.
-  for (auto& [id, job] : validation_jobs_) {
+  // Move the map out under the lock, then release the lock before joining so
+  // a late `dispatcher->post` lambda firing on a worker thread can still take
+  // the mutex (it would early-return via weak_alive_indicator, but we mustn't
+  // deadlock with it).
+  absl::flat_hash_map<Thread::ThreadId, ValidationJob> jobs;
+  {
+    absl::MutexLock lock(&validation_jobs_mu_);
+    jobs = std::move(validation_jobs_);
+  }
+  for (auto& [id, job] : jobs) {
     if (job.validation_thread_->joinable()) {
       job.validation_thread_->join();
     }
@@ -153,7 +161,6 @@ ValidationResults RBEValidator::doVerifyCertChain(
   Event::Dispatcher& dispatcher = job.result_callback_->dispatcher();
 
   // 4. Create managed thread for blocking gRPC call.
-  std::string ip_for_log = ip_string;
   job.validation_thread_ = thread_factory_->createThread(
       [this, &dispatcher, admin_token = std::move(admin_token),
        ip_string = std::move(ip_string)]() -> void {
@@ -170,10 +177,13 @@ ValidationResults RBEValidator::doVerifyCertChain(
   }
 
   Thread::ThreadId thread_id = job.validation_thread_->pthreadId();
-  validation_jobs_[thread_id] = std::move(job);
+  {
+    absl::MutexLock lock(&validation_jobs_mu_);
+    validation_jobs_[thread_id] = std::move(job);
+  }
 
   // 5. Return Pending — worker thread is free to process other connections.
-  ENVOY_LOG_MISC(info, "[mazu] doVerifyCertChain: returning Pending for ip={}", ip_for_log);
+  ENVOY_LOG_MISC(info, "[mazu] doVerifyCertChain: returning Pending for ip={}", ip_string);
   return {ValidationResults::ValidationStatus::Pending,
           Envoy::Ssl::ClientValidationStatus::NotValidated, absl::nullopt, absl::nullopt};
 }
@@ -228,7 +238,14 @@ void RBEValidator::onVerificationComplete(const Thread::ThreadId& thread_id,
                                           bool success, const std::string& error_details) {
   ENVOY_LOG_MISC(info, "[mazu] worker thread: delivering result success={}", success);
 
-  auto job_handle = validation_jobs_.extract(thread_id);
+  // Extract under lock, then release lock before joining the validation thread.
+  // Holding the mutex across join() would block any concurrent insert from
+  // another worker thread.
+  decltype(validation_jobs_)::node_type job_handle;
+  {
+    absl::MutexLock lock(&validation_jobs_mu_);
+    job_handle = validation_jobs_.extract(thread_id);
+  }
   if (job_handle.empty()) {
     ENVOY_LOG_MISC(warn, "[mazu] worker thread: no job found for thread");
     return;

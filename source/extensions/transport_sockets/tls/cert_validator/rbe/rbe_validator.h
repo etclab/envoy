@@ -27,6 +27,9 @@
 #include "openssl/ssl.h"
 #include "openssl/x509v3.h"
 
+#include "absl/base/thread_annotations.h"
+#include "absl/synchronization/mutex.h"
+
 #include <grpcpp/grpcpp.h>
 #include "envoy/service/auth/v3/external_auth.grpc.pb.h"
 
@@ -99,7 +102,12 @@ private:
   std::shared_ptr<grpc::Channel> ext_authz_channel_;
   std::unique_ptr<envoy::service::auth::v3::Authorization::Stub> ext_authz_stub_;
 
-  absl::flat_hash_map<Thread::ThreadId, ValidationJob> validation_jobs_;
+  // Guards `validation_jobs_`. Multiple Envoy worker threads insert (from
+  // doVerifyCertChain) and extract (from onVerificationComplete) concurrently;
+  // absl::flat_hash_map is not safe for concurrent mutation.
+  mutable absl::Mutex validation_jobs_mu_;
+  absl::flat_hash_map<Thread::ThreadId, ValidationJob> validation_jobs_
+      ABSL_GUARDED_BY(validation_jobs_mu_);
   std::shared_ptr<size_t> alive_indicator_{new size_t(1)};
   Thread::PosixThreadFactoryPtr thread_factory_;
 
