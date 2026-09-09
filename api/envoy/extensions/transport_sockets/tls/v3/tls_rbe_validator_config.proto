@@ -2,7 +2,10 @@ syntax = "proto3";
 
 package envoy.extensions.transport_sockets.tls.v3;
 
+import "google/protobuf/duration.proto";
+
 import "udpa/annotations/status.proto";
+import "validate/validate.proto";
 
 option java_package = "io.envoyproxy.envoy.extensions.transport_sockets.tls.v3";
 option java_outer_classname = "TlsRbeValidatorConfigProto";
@@ -14,5 +17,18 @@ option (udpa.annotations.file_status).package_version_status = ACTIVE;
 // validator. The validator calls the agent's ext_authz server via UDS for
 // live registration validation during each TLS handshake.
 message RBECertValidatorConfig {
-  // Empty — validator calls ext_authz via UDS for live validation.
+  // How long a validation verdict (allow *or* deny) is reused before the
+  // ext_authz server is consulted again. The cache is keyed on the peer's
+  // admin token, so the RPC rate becomes ``O(distinct peers / cache_ttl)``
+  // instead of ``O(handshakes)``.
+  //
+  // Revocation bound: a peer that is revoked at time ``T`` can keep being
+  // admitted until ``T + cache_ttl + <agent tokenCacheTTL>``, because the
+  // agent caches its own TokenReview results. Keep this value at or below the
+  // agent's ``tokenCacheTTL`` (currently 1s) so this validator never widens
+  // the revocation window by more than one agent TTL.
+  //
+  // Defaults to 1s. Setting it to 0 disables caching entirely (every
+  // handshake makes an ext_authz call).
+  google.protobuf.Duration cache_ttl = 1 [(validate.rules).duration = {gte {}}];
 }
